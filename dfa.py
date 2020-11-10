@@ -1,5 +1,6 @@
 import click
 import json
+from collections import deque
 
 
 class DFA:
@@ -23,6 +24,13 @@ class DFA:
             self.Delta = {}  # Function that translates states and chars to new states in the form (state,char) : state
             self.s = ''  # begin state, needs to be in K
             self.F = []  # list of end-states, need to be in K
+            self.save()
+
+    def rm_state(self, state: str):
+        if state in self.K:
+            if self.s == state: self.s = ''
+            self.F = [s for s in self.F if s != state]
+            self.K = [s for s in self.K if s != state]
             self.save()
 
     def load(self):
@@ -83,9 +91,11 @@ def set(new_states: str):
     """set command for the states variable"""
     new_states = new_states.split(',')
     new_states = [s.strip() for s in new_states]
+    for state in dfa.K:
+        if state not in new_states:
+            dfa.rm_state(state)
     dfa.K = new_states
     dfa.save()
-    click.echo(str(dfa) + ' is now ' + str(dfa.K))
 
 
 # command for adding states to dfa
@@ -97,7 +107,6 @@ def add(new_states: str):
     new_states = [s.strip() for s in new_states]
     dfa.K += new_states
     dfa.save()
-    click.echo(str(dfa) + ' is now ' + str(dfa.K))
 
 
 # command for removing states in dfa
@@ -105,12 +114,12 @@ def add(new_states: str):
 @click.argument('del_states', type=str)
 def rm(del_states: str):
     """remove command for the states variable"""
-    # TODO: should also remove States from s,F and Delta!
     del_states = del_states.split(',')
     del_states = [s.strip() for s in del_states]
-    dfa.K = [s for s in dfa.K if s not in del_states]
+    for state in dfa.K:
+        if state in del_states:
+            dfa.rm_state(state)
     dfa.save()
-    click.echo(str(dfa) + ' is now ' + str(dfa.K))
 
 
 @cli.group()
@@ -150,7 +159,7 @@ def rm(alpha):
 
 @cli.command()
 @click.argument('start_state', type=str)
-def s(start_state):
+def start(start_state):
     """set command for the s variable"""
     if start_state in dfa.K:
         dfa.s = start_state
@@ -209,5 +218,31 @@ def rm(final_states, full):
 
 @cli.group()
 def delta():
+    pass
+
+
+@delta.command()
+def build():
+    state_q = deque(dfa.K)
+    for state in state_q:
+        for char in dfa.Sigma:
+            if f'({state},{char})' not in dfa.Sigma:
+                res = input(f'({state},{char}) -> ')
+                res.strip()
+                if res in dfa.K:
+                    dfa.Delta[f'({state},{char})'] = res
+                else:
+                    answer = input(f'{res} is not in K do you want to create it?\n[y]es/[n]o/[f]ront: ')
+                    if answer in ['y', 'yes']:
+                        dfa.K.append(res)
+                        state_q.append(res)
+                    elif answer in ['f', 'front']:
+                        dfa.K.append(res)
+                        state_q.appendleft(res)
+    dfa.save()
+
+
+@delta.command()
+def change():
     pass
 
