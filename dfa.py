@@ -4,6 +4,7 @@ import json
 
 class DFA:
 
+    name: str
     K: list
     Sigma: list
     Delta: dict
@@ -16,6 +17,7 @@ class DFA:
         try:
             self.load()
         except IOError:
+            self.name = 'default'
             self.K = []  # list of Strings that act as States
             self.Sigma = []  # List of chars that defines the alphabet (defines valid input chars)
             self.Delta = {}  # Function that translates states and chars to new states in the form (state,char) : state
@@ -27,6 +29,7 @@ class DFA:
         with open(self.save_file, 'r') as f:
             s_dict = json.load(f)
 
+        self.name = s_dict['name']
         self.K = s_dict['K']
         self.Sigma = s_dict['Sigma']
         self.Delta = s_dict['Delta']
@@ -36,12 +39,20 @@ class DFA:
         f.close()
 
     def save(self):
-        s_dict = {'K': self.K, 'Sigma': self.Sigma, 'Delta': self.Delta, 's': self.s, 'F': self.F}
+        s_dict = {'name': self.name, 'K': self.K, 'Sigma': self.Sigma, 'Delta': self.Delta, 's': self.s, 'F': self.F}
 
         with open(self.save_file, 'w') as f:
             json.dump(s_dict, f)
 
         f.close()
+
+    def __repr__(self):
+        return f'{self.name}:\n' \
+               f'K: {self.K}\n' \
+               f'Σ: {self.Sigma}\n' \
+               f'ẟ: {self.Delta}\n' \
+               f's: {self.s}\n' \
+               f'F: {self.F}\n'
 
 
 dfa = DFA()
@@ -52,57 +63,95 @@ def cli():
     """this script enables you to quickly define a definite finite automaton from the command line"""
     pass
 
+
+@cli.command()
+def check():
+    click.echo(str(dfa))
+
+
 # group used to configure states of automaton
 @cli.group()
-def state():
+def k():
     """used to manipulate the states of the dfa"""
     pass
 
 
 # command for overriding states in dfa
-@state.command()
+@k.command()
 @click.argument('new_states', type=str)
 def set(new_states: str):
     """set command for the states variable"""
     new_states = new_states.split(',')
-    new_states = [state.strip() for state in new_states]
+    new_states = [s.strip() for s in new_states]
     dfa.K = new_states
     dfa.save()
     click.echo(str(dfa) + ' is now ' + str(dfa.K))
 
 
 # command for adding states to dfa
-@state.command()
+@k.command()
 @click.argument('new_states', type=str)
 def add(new_states: str):
     """add command for the states variable"""
     new_states = new_states.split(',')
-    new_states = [state.strip() for state in new_states]
+    new_states = [s.strip() for s in new_states]
     dfa.K += new_states
     dfa.save()
     click.echo(str(dfa) + ' is now ' + str(dfa.K))
 
 
 # command for removing states in dfa
-@state.command()
+@k.command()
 @click.argument('del_states', type=str)
 def rm(del_states: str):
     """remove command for the states variable"""
+    # TODO: should also remove States from s,F and Delta!
     del_states = del_states.split(',')
-    del_states = [state.strip() for state in del_states]
-    dfa.K = [state for state in dfa.K if state not in del_states]
+    del_states = [s.strip() for s in del_states]
+    dfa.K = [s for s in dfa.K if s not in del_states]
     dfa.save()
     click.echo(str(dfa) + ' is now ' + str(dfa.K))
 
 
 @cli.group()
-def alphabet():
+def sigma():
     pass
+
+
+@sigma.command()
+@click.argument('alpha', type=str)
+def set(alpha):
+    """set command for the Sigma variable"""
+    dfa.Sigma = []
+    for c in alpha:
+        if c not in dfa.Sigma:
+            dfa.Sigma.append(c)
+    dfa.save()
+
+
+@sigma.command()
+@click.argument('alpha', type=str)
+def add(alpha):
+    """add command for the Sigma variable"""
+    for c in alpha:
+        if c not in dfa.Sigma:
+            dfa.Sigma.append(c)
+    dfa.save()
+
+
+@sigma.command()
+@click.argument('alpha', type=str)
+def rm(alpha):
+    """remove command for the Sigma variable"""
+    temp = [c for c in dfa.Sigma if c not in alpha]
+    dfa.Sigma = temp
+    dfa.save()
 
 
 @cli.command()
 @click.argument('start_state', type=str)
-def start(start_state):
+def s(start_state):
+    """set command for the s variable"""
     if start_state in dfa.K:
         dfa.s = start_state
     else:
@@ -114,11 +163,51 @@ def start(start_state):
 
 
 @cli.group()
-def accept():
+def f():
     pass
 
 
+@f.command()
+@click.argument('final_states', type=str)
+def set(final_states):
+    """set command for the F variable"""
+    final_states = [s.strip() for s in final_states.split(',')]
+    for fs in final_states:
+        if fs not in dfa.K:
+            answer = input(f'{fs} is not in K would you like to add it or skip?\n[a/y] = add / [s/n] = skip: ')
+            if answer in ['yes', 'y', 'add', 'a']:
+                dfa.K.append(fs)
+            else: continue
+        dfa.F.append(fs)
+    dfa.save()
+
+
+@f.command()
+@click.argument('final_states', type=str)
+def add(final_states):
+    """add command for the F variable"""
+    final_states = [s.strip() for s in final_states.split(',')]
+    for fs in final_states:
+        if fs not in dfa.F:
+            if fs not in dfa.K:
+                answer = input(f'{fs} is not in K would you like to add it or skip?\n[a/y] = add / [s/n] = skip: ')
+                if answer in ['yes', 'y', 'add', 'a']:
+                    dfa.K.append(fs)
+                else: continue
+            dfa.F.append(fs)
+    dfa.save()
+
+
+@f.command()
+@click.argument('final_states', type=str)
+def rm(final_states, full):
+    """remove command for the F variable"""
+    final_states = [s.strip() for s in final_states.split(',')]
+    dfa.F = [fs for fs in dfa.F if fs not in final_states]
+    dfa.save()
+
+
 @cli.group()
-def transition():
+def delta():
     pass
 
