@@ -33,9 +33,19 @@ class DFA:
             self.K = [s for s in self.K if s != state]
             self.save()
 
+            new_delta = {}
+            for state1 in self.Delta:
+                for char, state2 in self.Delta[state1].items():
+                    if state1 != state and state2 != state:
+                        if state1 not in new_delta:
+                            new_delta[state1] = {}
+                        new_delta[state1][char] = state2
+
+            self.Delta = new_delta
+
     def load(self):
-        with open(self.save_file, 'r') as f:
-            s_dict = json.load(f)
+        with open(self.save_file, 'r') as file:
+            s_dict = json.load(file)
 
         self.name = s_dict['name']
         self.K = s_dict['K']
@@ -44,15 +54,15 @@ class DFA:
         self.s = s_dict['s']
         self.F = s_dict['F']
 
-        f.close()
+        file.close()
 
     def save(self):
         s_dict = {'name': self.name, 'K': self.K, 'Sigma': self.Sigma, 'Delta': self.Delta, 's': self.s, 'F': self.F}
 
-        with open(self.save_file, 'w') as f:
-            json.dump(s_dict, f)
+        with open(self.save_file, 'w') as file:
+            json.dump(s_dict, file, indent=4)
 
-        f.close()
+        file.close()
 
     def __repr__(self):
         return f'{self.name}:\n' \
@@ -64,6 +74,17 @@ class DFA:
 
 
 dfa = DFA()
+
+
+class SaveDecorator(object):
+
+    def __init__(self, func):
+        self.__name__ = func.__name__
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        self.func(*args, **kwargs)
+        dfa.save()
 
 
 @click.group()
@@ -87,6 +108,7 @@ def k():
 # command for overriding states in dfa
 @k.command()
 @click.argument('new_states', type=str)
+@SaveDecorator
 def set(new_states: str):
     """set command for the states variable"""
     new_states = new_states.split(',')
@@ -95,23 +117,23 @@ def set(new_states: str):
         if state not in new_states:
             dfa.rm_state(state)
     dfa.K = new_states
-    dfa.save()
 
 
 # command for adding states to dfa
 @k.command()
 @click.argument('new_states', type=str)
+@SaveDecorator
 def add(new_states: str):
     """add command for the states variable"""
     new_states = new_states.split(',')
     new_states = [s.strip() for s in new_states]
     dfa.K += new_states
-    dfa.save()
 
 
 # command for removing states in dfa
 @k.command()
 @click.argument('del_states', type=str)
+@SaveDecorator
 def rm(del_states: str):
     """remove command for the states variable"""
     del_states = del_states.split(',')
@@ -119,7 +141,6 @@ def rm(del_states: str):
     for state in dfa.K:
         if state in del_states:
             dfa.rm_state(state)
-    dfa.save()
 
 
 @cli.group()
@@ -129,36 +150,37 @@ def sigma():
 
 @sigma.command()
 @click.argument('alpha', type=str)
+@SaveDecorator
 def set(alpha):
     """set command for the Sigma variable"""
     dfa.Sigma = []
     for c in alpha:
         if c not in dfa.Sigma:
             dfa.Sigma.append(c)
-    dfa.save()
 
 
 @sigma.command()
 @click.argument('alpha', type=str)
+@SaveDecorator
 def add(alpha):
     """add command for the Sigma variable"""
     for c in alpha:
         if c not in dfa.Sigma:
             dfa.Sigma.append(c)
-    dfa.save()
 
 
 @sigma.command()
 @click.argument('alpha', type=str)
+@SaveDecorator
 def rm(alpha):
     """remove command for the Sigma variable"""
     temp = [c for c in dfa.Sigma if c not in alpha]
     dfa.Sigma = temp
-    dfa.save()
 
 
 @cli.command()
 @click.argument('start_state', type=str)
+@SaveDecorator
 def start(start_state):
     """set command for the s variable"""
     if start_state in dfa.K:
@@ -168,7 +190,6 @@ def start(start_state):
             dfa.K.append(start_state)
             dfa.s = start_state
     click.echo(f'start state is now {dfa.s}')
-    dfa.save()
 
 
 @cli.group()
@@ -178,6 +199,7 @@ def f():
 
 @f.command()
 @click.argument('final_states', type=str)
+@SaveDecorator
 def set(final_states):
     """set command for the F variable"""
     final_states = [s.strip() for s in final_states.split(',')]
@@ -188,11 +210,11 @@ def set(final_states):
                 dfa.K.append(fs)
             else: continue
         dfa.F.append(fs)
-    dfa.save()
 
 
 @f.command()
 @click.argument('final_states', type=str)
+@SaveDecorator
 def add(final_states):
     """add command for the F variable"""
     final_states = [s.strip() for s in final_states.split(',')]
@@ -204,16 +226,15 @@ def add(final_states):
                     dfa.K.append(fs)
                 else: continue
             dfa.F.append(fs)
-    dfa.save()
 
 
 @f.command()
 @click.argument('final_states', type=str)
+@SaveDecorator
 def rm(final_states, full):
     """remove command for the F variable"""
     final_states = [s.strip() for s in final_states.split(',')]
     dfa.F = [fs for fs in dfa.F if fs not in final_states]
-    dfa.save()
 
 
 @cli.group()
@@ -222,27 +243,36 @@ def delta():
 
 
 @delta.command()
+@SaveDecorator
 def build():
     state_q = deque(dfa.K)
+
     for state in state_q:
+        if state not in dfa.Delta:
+            dfa.Delta[state] = {}
+
         for char in dfa.Sigma:
-            if f'({state},{char})' not in dfa.Sigma:
+            while char not in dfa.Delta[state]:
                 res = input(f'({state},{char}) -> ')
                 res.strip()
+
                 if res in dfa.K:
-                    dfa.Delta[f'({state},{char})'] = res
+                    dfa.Delta[state][char] = res
+
                 else:
                     answer = input(f'{res} is not in K do you want to create it?\n[y]es/[n]o/[f]ront: ')
                     if answer in ['y', 'yes']:
                         dfa.K.append(res)
                         state_q.append(res)
+                        dfa.Delta[state][char] = res
                     elif answer in ['f', 'front']:
                         dfa.K.append(res)
                         state_q.appendleft(res)
-    dfa.save()
+                        dfa.Delta[state][char] = res
+                    # else: repeat loop and ask for new res
 
 
 @delta.command()
+@SaveDecorator
 def change():
     pass
-
