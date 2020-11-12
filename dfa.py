@@ -66,7 +66,6 @@ class DFA:
 
     def valid(self):
         # TODO: validate Delta
-        # TODO: make sure Elements of s,F and Delta! are in K
         f_in_k = False if [f_ for f_ in self.F if f_ not in self.K] else True
         return self.K != [] and self.Sigma != [] and self.s in self.K and self.F != [] and f_in_k
 
@@ -105,9 +104,10 @@ def check():
 
 
 @cli.command()
-@click.option('--step', is_flag=True)
+@click.option('-s', '--step', is_flag=True)
+@click.option('-v', '--verbose', is_flag=True)
 @click.argument('word', type=str)
-def run(word, step):
+def run(word, step, verbose):
     # check if dfa is valid
     if not dfa.valid():
         raise Exception(f'DFA: {dfa.name} is not valid yet')
@@ -120,10 +120,13 @@ def run(word, step):
     current_state = dfa.s
     for c in word:
         new_state = dfa.Delta[current_state][c]
+        if step or verbose:
+            click.echo(f'({current_state},{c}) -> {new_state}')
         if step:
-            cmd = input(f'({current_state},{c}) -> {new_state}\npress any key or [q]uit... ')
-            if cmd in ['q', 'quit']: break
+            cmd = input(f'press any key or [q]uit... ')
+            if cmd in ['q', 'quit']: return
         current_state = new_state
+
     click.echo(f'{word} accepted by {dfa.name}' if current_state in dfa.F else f'{word} not accepted by {dfa.name}')
 
 
