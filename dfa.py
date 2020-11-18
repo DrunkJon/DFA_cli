@@ -43,11 +43,58 @@ class DFA:
 
             self.Delta = new_delta
 
-    def load(self):
+    def open(self, name: str):
         with open(self.save_file, 'r') as file:
-            s_dict = json.load(file)
+            data = json.load(file)
 
-        self.name = s_dict['name']
+        self.name = name
+        data[0] = name
+
+        if name not in data[1].keys():
+            data[1][name] = {"K": [], "Sigma": [], "Delta": {}, "s": "", "F": []}
+
+        with open(self.save_file, 'w') as file:
+            json.dump(data, file, indent=4)
+
+        self.load()
+        file.close()
+
+    def delete(self, name: str, no_check=False):
+        with open(self.save_file, 'r') as file:
+            data = json.load(file)
+
+        if not no_check and name in data[1].keys():
+            click.echo(str(data[1][name]))
+            click.echo(f'do you really want to delete {name}?')
+            answer = input(f'[y]es/[n]o | ')
+            if answer not in ['y', 'yes']: return
+        elif name not in data[1].keys(): return
+
+        open_after = False
+        new_dfa = ''
+        if name == data[0]:
+            click.echo(f'{name} is currently open, which DFA should be opened after deletion?')
+            new_dfa = input('')
+            open_after = True
+
+        del data[1][name]
+
+        with open(self.save_file, 'w') as file:
+            json.dump(data, file, indent=4)
+
+        file.close()
+
+        if open_after:
+            self.open(new_dfa)
+
+    def load(self):
+
+        with open(self.save_file, 'r') as file:
+            load = json.load(file)
+
+        s_dict = load[1][load[0]]   # dump[0] has name of currently used DFA
+
+        self.name = load[0]
         self.K = s_dict['K']
         self.Sigma = s_dict['Sigma']
         self.Delta = s_dict['Delta']
@@ -57,10 +104,14 @@ class DFA:
         file.close()
 
     def save(self):
-        s_dict = {'name': self.name, 'K': self.K, 'Sigma': self.Sigma, 'Delta': self.Delta, 's': self.s, 'F': self.F}
+        s_dict = {'K': self.K, 'Sigma': self.Sigma, 'Delta': self.Delta, 's': self.s, 'F': self.F}
+
+        with open(self.save_file, 'r') as file:
+            data = json.load(file)
+            data[1][self.name] = s_dict
 
         with open(self.save_file, 'w') as file:
-            json.dump(s_dict, file, indent=4)
+            json.dump(data, file, indent=4)
 
         file.close()
 
@@ -68,6 +119,9 @@ class DFA:
         # TODO: validate Delta
         f_in_k = False if [f_ for f_ in self.F if f_ not in self.K] else True
         return self.K != [] and self.Sigma != [] and self.s in self.K and self.F != [] and f_in_k
+
+    def check(self):
+        click.echo(str(self))
 
     def __repr__(self):
         return f'{self.name}:\n' \
@@ -100,13 +154,28 @@ def cli():
 
 @cli.command()
 def check():
-    click.echo(str(dfa))
+    dfa.check()
 
+
+@cli.command()
+@click.option('-c', '--check', 'instant_check', is_flag=True)
+@click.argument('name', type=str, default='default', required=False)
+def read(name, instant_check):
+    dfa.open(name)
+    click.echo(f'current DFA is now {dfa.name}')
+    if instant_check:
+        dfa.check()
+
+@cli.command()
+@click.option('-c', '--no-check', 'no_check', is_flag=True)
+@click.argument('name', type=str)
+def delete(name, no_check):
+    dfa.delete(name, no_check)
 
 @cli.command()
 @click.option('-s', '--step', is_flag=True)
 @click.option('-v', '--verbose', is_flag=True)
-@click.argument('word', type=str)
+@click.argument('word', type=str, default='', required=False)
 def run(word, step, verbose):
     # check if dfa is valid
     if not dfa.valid():
